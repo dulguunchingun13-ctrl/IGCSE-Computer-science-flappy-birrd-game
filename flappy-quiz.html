@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flappy Quiz — IGCSE 0478</title>
+<style>
+  :root{
+    --sky-top:#4ec0ca;
+    --sky-bottom:#a8e6cf;
+    --rail-w:64px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    background:#1c1c22;
+    font-family:'Trebuchet MS', 'Segoe UI', sans-serif;
+    overflow:hidden;
+    -webkit-user-select:none; user-select:none;
+    touch-action:manipulation;
+  }
+  #app{
+    position:fixed; inset:0;
+    display:flex;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    padding-left:env(safe-area-inset-left,0px);
+    padding-right:env(safe-area-inset-right,0px);
+  }
+
+  /* ---------- Side rail ---------- */
+  #rail{
+    width:var(--rail-w);
+    min-width:var(--rail-w);
+    height:100%;
+    background:#15151b;
+    border-right:2px solid rgba(255,222,89,0.35);
+    display:flex; flex-direction:column; align-items:center;
+    padding-top:14px;
+    gap:10px;
+    z-index:70;
+  }
+  .railbtn{
+    width:48px; height:56px;
+    border:none; outline:none;
+    background:transparent;
+    color:#8b8b96;
+    font-family:inherit;
+    cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:4px;
+    border-radius:12px;
+    transition:background .2s ease, color .2s ease;
+  }
+  .railbtn .ic{ font-size:20px; }
+  .railbtn .lb{ font-size:9px; font-weight:700; letter-spacing:.3px; }
+  .railbtn:hover{ background:rgba(255,255,255,0.06); color:#e8e8e8; }
+  .railbtn.active{
+    background:rgba(255,222,89,0.16);
+    color:#ffde59;
+  }
+  .railbtn.active::before{
+    content:'';
+    position:absolute;
+  }
+  #railDivider{
+    width:32px; height:2px;
+    background:rgba(255,255,255,0.1);
+    margin:4px 0;
+  }
+  #bestRail{
+    margin-top:auto;
+    margin-bottom:16px;
+    color:#8b8b96;
+    font-size:9px;
+    font-weight:700;
+    text-align:center;
+    line-height:1.5;
+  }
+  #bestRail b{ color:#ffde59; display:block; font-size:14px; }
+
+  /* ---------- Stage (game area) ---------- */
+  #stage{
+    position:relative;
+    flex:1;
+    height:100%;
+    display:flex; align-items:center; justify-content:center;
+    background:#0e0e12;
+    min-width:0;
+  }
+  #canvasWrap{
+    position:relative;
+    height:100%;
+    aspect-ratio:3/4;
+    max-width:100%;
+    max-height:100%;
+  }
+  canvas{
+    display:block;
+    width:100%; height:100%;
+    image-rendering:pixelated;
+    cursor:pointer;
+    background:var(--sky-top);
+  }
+  .overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center;
+    color:#fff;
+    background:rgba(10,10,16,0.72);
+    gap:14px;
+    padding:24px; box-sizing:border-box;
+  }
+  .hidden{display:none !important;}
+  .title{
+    font-size:clamp(26px,6vw,36px); font-weight:800; color:#ffde59;
+    -webkit-text-stroke:2px #7a4a00;
+    text-shadow:3px 3px 0 #7a4a00;
+    letter-spacing:1px;
+  }
+  .sub{ font-size:14.5px; color:#f0f0f0; max-width:360px; line-height:1.5; }
+  button.gamebtn{
+    font-family:inherit;
+    font-size:17px; font-weight:700;
+    padding:12px 28px;
+    border-radius:10px;
+    border:3px solid #7a4a00;
+    background:#ffde59;
+    color:#5a3400;
+    cursor:pointer;
+    box-shadow:0 4px 0 #7a4a00;
+  }
+  button.gamebtn:active{ transform:translateY(3px); box-shadow:0 1px 0 #7a4a00; }
+  #scoreRow{ display:flex; gap:24px; font-size:16px; }
+  #scoreRow b{ color:#ffde59; }
+
+  /* ---------- Question banner (now OUTSIDE the canvas, own bar) ---------- */
+  #questionBar{
+    position:absolute; top:0; left:0; right:0;
+    min-height:56px;
+    display:flex; align-items:center; justify-content:center;
+    text-align:center;
+    padding:10px 16px;
+    background:linear-gradient(180deg, rgba(10,10,18,0.92), rgba(10,10,18,0.8));
+    border-bottom:2px solid rgba(255,222,89,0.55);
+    z-index:20;
+    opacity:0;
+    transform:translateY(-8px);
+    transition:opacity .25s ease, transform .25s ease;
+    pointer-events:none;
+  }
+  #questionBar.show{ opacity:1; transform:translateY(0); }
+  #questionBar span{
+    font-size:15px;
+    font-weight:700;
+    color:#fff;
+    line-height:1.35;
+    max-width:100%;
+  }
+
+  #hud{
+    position:absolute; top:64px; left:0; right:0;
+    text-align:center;
+    font-size:26px; font-weight:800; color:#fff;
+    -webkit-text-stroke:1.5px #333;
+    text-shadow:2px 2px 0 #333;
+    pointer-events:none;
+    z-index:15;
+    transition:opacity .2s ease;
+  }
+
+  #streakBadge{
+    position:absolute; top:64px; right:14px;
+    font-size:12px; font-weight:700;
+    color:#fff2c2;
+    background:rgba(10,10,18,0.55);
+    border:1.5px solid rgba(255,222,89,0.55);
+    border-radius:20px;
+    padding:4px 10px;
+    z-index:16;
+    pointer-events:none;
+  }
+  #streakBadge b{ color:#ffde59; }
+
+  #comboPop{
+    position:absolute; top:100px; left:0; right:0;
+    text-align:center;
+    font-size:16px; font-weight:800;
+    color:#ffde59;
+    -webkit-text-stroke:1px #7a4a00;
+    text-shadow:2px 2px 0 #7a4a00;
+    pointer-events:none;
+    z-index:17;
+    opacity:0;
+  }
+  #comboPop.pop{
+    animation:comboRise 0.9s ease forwards;
+  }
+  @keyframes comboRise{
+    0%{ opacity:0; transform:translateY(6px) scale(0.9); }
+    20%{ opacity:1; transform:translateY(0) scale(1.05); }
+    35%{ transform:translateY(0) scale(1); }
+    100%{ opacity:0; transform:translateY(-18px) scale(1); }
+  }
+
+  /* ---------- Flashcard panel (own full pane, no longer stacked over the game) ---------- */
+  #flashcardPanel{
+    position:relative;
+    flex:1; height:100%;
+    box-sizing:border-box;
+    background:linear-gradient(160deg,#2b1e63,#4a2f8f 45%,#7b3fa0);
+    display:none;
+    flex-direction:column; align-items:center; justify-content:center;
+    padding:24px;
+  }
+  #flashcardPanel.open{ display:flex; }
+  .fc-header{
+    color:#fff; text-align:center;
+    margin-bottom:4px;
+  }
+  .fc-header h2{
+    margin:0; font-size:clamp(18px,3vw,22px); letter-spacing:0.5px;
+    color:#ffde59;
+    -webkit-text-stroke:1px #5a3400;
+  }
+  .fc-header p{ margin:4px 0 0; font-size:12.5px; color:#dcd3ff; }
+  .fc-counter{
+    color:#dcd3ff; font-size:13px; margin-top:10px;
+    font-weight:700;
+  }
+
+  .flip-card{
+    width:min(340px,80vw); height:210px;
+    margin-top:16px;
+    perspective:1200px;
+    cursor:pointer;
+  }
+  .flip-inner{
+    position:relative; width:100%; height:100%;
+    transition:transform .6s cubic-bezier(.65,0,.35,1);
+    transform-style:preserve-3d;
+  }
+  .flip-card.flipped .flip-inner{ transform:rotateY(180deg); }
+  .flip-card.enter .flip-inner{ animation:cardPop .35s ease; }
+  @keyframes cardPop{
+    0%{ transform:scale(.85) rotateY(var(--rot,0deg)); opacity:0; }
+    100%{ transform:scale(1) rotateY(var(--rot,0deg)); opacity:1; }
+  }
+  .fc-face{
+    position:absolute; inset:0;
+    backface-visibility:hidden;
+    border-radius:16px;
+    display:flex; align-items:center; justify-content:center;
+    text-align:center;
+    padding:20px; box-sizing:border-box;
+    border:3px solid #ffde59;
+    box-shadow:0 8px 22px rgba(0,0,0,0.35);
+  }
+  .fc-front{
+    background:linear-gradient(160deg,#ffde59,#ff8c1a);
+    color:#5a3400;
+    font-size:26px; font-weight:800;
+  }
+  .fc-back{
+    background:linear-gradient(160deg,#f6f6ff,#dcd3ff);
+    color:#2b1e63;
+    font-size:15px; font-weight:600; line-height:1.45;
+    transform:rotateY(180deg);
+  }
+  .fc-hint{
+    color:#dcd3ff; font-size:11px; margin-top:10px; opacity:0.8;
+  }
+  .fc-controls{
+    display:flex; align-items:center; gap:18px; margin-top:22px;
+  }
+  .fc-controls button{
+    font-family:inherit; font-size:16px; font-weight:700;
+    width:46px; height:46px; border-radius:50%;
+    border:2px solid #ffde59;
+    background:rgba(255,255,255,0.08);
+    color:#ffde59;
+    cursor:pointer;
+  }
+  .fc-controls button:active{ transform:scale(0.92); }
+  .fc-progress{
+    width:min(340px,80vw);
+    height:5px;
+    border-radius:3px;
+    background:rgba(255,255,255,0.15);
+    margin-top:18px;
+    overflow:hidden;
+  }
+  .fc-progress-fill{
+    height:100%;
+    background:#ffde59;
+    border-radius:3px;
+    transition:width .3s ease;
+  }
+  .fc-shuffle{
+    margin-top:18px;
+    font-family:inherit; font-size:13px; font-weight:700;
+    padding:8px 18px; border-radius:20px;
+    border:2px solid #ffde59;
+    background:rgba(255,255,255,0.08);
+    color:#ffde59;
+    cursor:pointer;
+  }
+  .fc-know-row{
+    display:flex; gap:10px; margin-top:14px;
+  }
+  .fc-know-row button{
+    font-family:inherit; font-size:12.5px; font-weight:700;
+    padding:8px 16px; border-radius:20px;
+    border:2px solid rgba(255,255,255,0.4);
+    background:rgba(255,255,255,0.06);
+    color:#f0f0f0;
+    cursor:pointer;
+  }
+  .fc-know-row button.got-it{ border-color:#7ed957; color:#c9f5b3; }
+  .fc-know-row button.again{ border-color:#ff8080; color:#ffc2c2; }
+
+  @media (max-width:640px){
+    :root{ --rail-w:56px; }
+    .railbtn{ width:40px; height:48px; }
+    .railbtn .ic{ font-size:18px; }
+    .railbtn .lb{ font-size:8px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="rail">
+    <button class="railbtn active" id="tabGameBtn" title="Game">
+      <span class="ic">🐤</span><span class="lb">GAME</span>
+    </button>
+    <div id="railDivider"></div>
+    <button class="railbtn" id="tabCardsBtn" title="Flashcards">
+      <span class="ic">📚</span><span class="lb">CARDS</span>
+    </button>
+    <div id="bestRail">BEST<b id="bestRailVal">0</b></div>
+  </div>
+
+  <div id="stage">
+    <div id="canvasWrap">
+      <div id="questionBar"><span id="questionText"></span></div>
+      <canvas id="game" width="480" height="640"></canvas>
+      <div id="hud" class="hidden">0</div>
+      <div id="comboPop" class="hidden">🔥 combo bonus +1</div>
+      <div id="streakBadge" class="hidden">Streak: <b id="streakVal">0</b></div>
+
+      <div id="startScreen" class="overlay">
+        <div class="title">FLAPPY QUIZ</div>
+        <div class="sub">IGCSE 0478 Computer Science edition.<br>
+        Tap / click / press SPACE to flap.<br>
+        Read the question at the top, then fly through the gap with the <b>correct</b> answer to pass. The wrong gap (or hitting a pipe) ends the run!</div>
+        <button class="gamebtn" id="startBtn">Tap to Start</button>
+      </div>
+
+      <div id="overScreen" class="overlay hidden">
+        <div class="title" style="color:#ff6b6b; -webkit-text-stroke:2px #6b0000; text-shadow:3px 3px 0 #6b0000;">GAME OVER</div>
+        <div class="sub" id="deathReason">You crashed.</div>
+        <div id="scoreRow">
+          <div>Score: <b id="finalScore">0</b></div>
+          <div>Best: <b id="bestScore">0</b></div>
+          <div>Best streak: <b id="bestStreakVal">0</b></div>
+        </div>
+        <button class="gamebtn" id="restartBtn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="flashcardPanel">
+    <div class="fc-header">
+      <h2>IGCSE 0478 Keywords</h2>
+      <p>Tap a card to flip it. Use the arrows to move on.</p>
+    </div>
+    <div class="fc-counter" id="fcCounter">1 / 20</div>
+    <div class="flip-card" id="flipCard">
+      <div class="flip-inner">
+        <div class="fc-face fc-front" id="fcFront">Term</div>
+        <div class="fc-face fc-back" id="fcBack">Definition</div>
+      </div>
+    </div>
+    <div class="fc-progress"><div class="fc-progress-fill" id="fcProgressFill"></div></div>
+    <div class="fc-hint">click card to flip</div>
+    <div class="fc-controls">
+      <button id="fcPrev">◀</button>
+      <button id="fcNext">▶</button>
+    </div>
+    <button class="fc-shuffle" id="fcShuffle">🔀 Shuffle</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const GROUND_H = 60;
+  const PLAY_H = H - GROUND_H;
+
+  const hud = document.getElementById('hud');
+  const startScreen = document.getElementById('startScreen');
+  const overScreen = document.getElementById('overScreen');
+  const startBtn = document.getElementById('startBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const finalScoreEl = document.getElementById('finalScore');
+  const bestScoreEl = document.getElementById('bestScore');
+  const deathReasonEl = document.getElementById('deathReason');
+  const questionBar = document.getElementById('questionBar');
+  const questionText = document.getElementById('questionText');
+  const bestRailVal = document.getElementById('bestRailVal');
+  const streakBadge = document.getElementById('streakBadge');
+  const streakVal = document.getElementById('streakVal');
+  const comboPop = document.getElementById('comboPop');
+
+  function updateHud(showCombo){
+    hud.textContent = score;
+    streakVal.textContent = streak;
+    if(showCombo){
+      comboPop.classList.remove('pop');
+      void comboPop.offsetWidth;
+      comboPop.classList.add('pop');
+    }
+  }
+
+  // ---------- IGCSE 0478 question bank ----------
+  const QUESTIONS = [
+    {q:"How many bits are in one byte?", correct:"8", wrong:"10"},
+    {q:"What does CPU stand for?", correct:"Central Processing Unit", wrong:"Computer Processing Utility"},
+    {q:"Which number base is hexadecimal?", correct:"Base 16", wrong:"Base 8"},
+    {q:"What does RAM stand for?", correct:"Random Access Memory", wrong:"Read Access Memory"},
+    {q:"Which type of memory is volatile?", correct:"RAM", wrong:"ROM"},
+    {q:"What does 'LAN' stand for?", correct:"Local Area Network", wrong:"Long Area Network"},
+    {q:"Which gate outputs 1 only if both inputs are 1?", correct:"AND gate", wrong:"OR gate"},
+    {q:"What is used to detect transmission errors?", correct:"Checksum", wrong:"Cookie"},
+    {q:"Which translator converts source code all at once before running?", correct:"Compiler", wrong:"Interpreter"},
+    {q:"What type of storage is a Blu-ray disc?", correct:"Optical", wrong:"Magnetic"},
+    {q:"What does 'HTML' stand for?", correct:"HyperText Markup Language", wrong:"HighText Machine Language"},
+    {q:"Which flowchart symbol shows a decision?", correct:"Diamond", wrong:"Rectangle"},
+    {q:"What best describes 'phishing'?", correct:"Fraudulent emails", wrong:"Network hardware"},
+    {q:"In binary, what is 1 + 1?", correct:"10", wrong:"11"},
+    {q:"What is a value that never changes called?", correct:"Constant", wrong:"Array"},
+    {q:"Which device converts digital signals for transmission over telephone lines?", correct:"Modem", wrong:"Router"},
+    {q:"What does 'SQL' stand for?", correct:"Structured Query Language", wrong:"Simple Query Logic"},
+    {q:"Which storage device has no moving parts?", correct:"SSD", wrong:"HDD"},
+    {q:"What is unsolicited bulk email called?", correct:"Spam", wrong:"Malware"},
+    {q:"What does 'WWW' stand for?", correct:"World Wide Web", wrong:"World Wireless Web"},
+    {q:"Which of these is an input device?", correct:"Scanner", wrong:"Speaker"},
+    {q:"What is processed data called?", correct:"Information", wrong:"Algorithm"},
+    {q:"Which network topology links all devices to one central hub?", correct:"Star topology", wrong:"Ring topology"},
+    {q:"What does ASCII represent?", correct:"Text characters", wrong:"Image pixels"},
+    {q:"Which is an example of secondary storage?", correct:"Hard disk", wrong:"Cache"},
+    {q:"What does 'IDE' stand for in programming?", correct:"Integrated Dev. Environment", wrong:"Internal Data Engine"},
+    {q:"Which error occurs when code breaks syntax rules?", correct:"Syntax error", wrong:"Logic error"},
+    {q:"What converts a program into machine code line-by-line as it runs?", correct:"Interpreter", wrong:"Compiler"},
+  ];
+
+  function shuffledBag(arr){
+    let bag = arr.slice();
+    for(let i=bag.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [bag[i],bag[j]]=[bag[j],bag[i]];
+    }
+    return bag;
+  }
+  let qBag = shuffledBag(QUESTIONS);
+  function nextQuestion(){
+    if(qBag.length===0) qBag = shuffledBag(QUESTIONS);
+    return qBag.pop();
+  }
+
+  // ---------- Flashcard keyword bank (IGCSE 0478) ----------
+  const KEYWORDS = [
+    {term:"CPU", def:"Central Processing Unit — fetches, decodes and executes instructions."},
+    {term:"RAM", def:"Random Access Memory — volatile memory that holds currently running programs and data."},
+    {term:"ROM", def:"Read Only Memory — non-volatile memory that stores the boot-up instructions."},
+    {term:"Compiler", def:"Translates the whole source code into machine code before the program runs."},
+    {term:"Interpreter", def:"Translates and executes source code line by line as the program runs."},
+    {term:"Algorithm", def:"A step-by-step set of instructions used to solve a problem."},
+    {term:"Variable", def:"A named storage location whose value can change while a program runs."},
+    {term:"Constant", def:"A named value that stays the same throughout the execution of a program."},
+    {term:"Array", def:"A data structure that stores multiple values of the same type under one name."},
+    {term:"Binary", def:"The base-2 number system, using only the digits 0 and 1."},
+    {term:"Hexadecimal", def:"The base-16 number system, using digits 0-9 and letters A-F."},
+    {term:"LAN", def:"Local Area Network — devices connected within a small geographic area, e.g. one building."},
+    {term:"WAN", def:"Wide Area Network — a network that spans a large geographic area, e.g. the internet."},
+    {term:"Router", def:"A device that forwards data packets between networks."},
+    {term:"Modem", def:"Converts digital data to analogue signals (and back) for transmission over phone lines."},
+    {term:"Firewall", def:"Software or hardware that monitors and controls incoming/outgoing network traffic."},
+    {term:"Encryption", def:"Scrambling data into an unreadable form so only authorised parties can read it."},
+    {term:"Phishing", def:"Sending fraudulent emails/messages pretending to be from a trustworthy source."},
+    {term:"Malware", def:"Malicious software designed to damage or gain unauthorised access to a system."},
+    {term:"SSD", def:"Solid State Drive — storage with no moving parts, using flash memory."},
+    {term:"HDD", def:"Hard Disk Drive — storage that uses spinning magnetic platters."},
+    {term:"Flowchart", def:"A diagram that represents an algorithm using standard symbols and arrows."},
+    {term:"Pseudocode", def:"An informal, code-like way of describing an algorithm without strict syntax."},
+    {term:"Boolean", def:"A data type that can only hold one of two values: TRUE or FALSE."},
+    {term:"ASCII", def:"A character-encoding standard that represents text using numeric codes."},
+    {term:"Database", def:"An organised collection of structured data, usually stored and accessed electronically."},
+    {term:"Validation", def:"An automated check that data entered is reasonable and follows set rules."},
+    {term:"Verification", def:"Checking that data has been entered or copied accurately, e.g. double entry."},
+    {term:"Cache", def:"Small, very fast memory that stores frequently used data close to the CPU."},
+    {term:"Bitmap", def:"An image made up of a grid of pixels, each storing colour information."},
+  ];
+
+  let fcOrder = KEYWORDS.map((_,i)=>i);
+  let fcIndex = 0;
+
+  const flipCard = document.getElementById('flipCard');
+  const fcFront = document.getElementById('fcFront');
+  const fcBack = document.getElementById('fcBack');
+  const fcCounter = document.getElementById('fcCounter');
+  const fcProgressFill = document.getElementById('fcProgressFill');
+
+  function renderFlashcard(animate){
+    const k = KEYWORDS[fcOrder[fcIndex]];
+    flipCard.classList.remove('flipped');
+    fcFront.textContent = k.term;
+    fcBack.textContent = k.def;
+    fcCounter.textContent = (fcIndex+1) + ' / ' + KEYWORDS.length;
+    fcProgressFill.style.width = (((fcIndex+1)/KEYWORDS.length)*100) + '%';
+    if(animate){
+      flipCard.classList.remove('enter');
+      void flipCard.offsetWidth; // restart animation
+      flipCard.classList.add('enter');
+    }
+  }
+  function fcShuffle(arr){
+    const a = arr.slice();
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  flipCard.addEventListener('click', ()=> flipCard.classList.toggle('flipped'));
+  document.getElementById('fcNext').addEventListener('click', ()=>{
+    fcIndex = (fcIndex+1) % KEYWORDS.length;
+    renderFlashcard(true);
+  });
+  document.getElementById('fcPrev').addEventListener('click', ()=>{
+    fcIndex = (fcIndex-1+KEYWORDS.length) % KEYWORDS.length;
+    renderFlashcard(true);
+  });
+  document.getElementById('fcShuffle').addEventListener('click', ()=>{
+    fcOrder = fcShuffle(fcOrder);
+    fcIndex = 0;
+    renderFlashcard(true);
+  });
+  // keyboard nav for flashcards when that tab is active
+  window.addEventListener('keydown', (e)=>{
+    if(activeTab !== 'cards') return;
+    if(e.code==='ArrowRight'){ document.getElementById('fcNext').click(); }
+    if(e.code==='ArrowLeft'){ document.getElementById('fcPrev').click(); }
+    if(e.code==='Space'){ e.preventDefault(); flipCard.classList.toggle('flipped'); }
+  });
+  renderFlashcard(false);
+
+  // ---------- Tab switching (now a side rail, and each tab gets its own pane) ----------
+  let activeTab = 'game';
+  const tabGameBtn = document.getElementById('tabGameBtn');
+  const tabCardsBtn = document.getElementById('tabCardsBtn');
+  const flashcardPanel = document.getElementById('flashcardPanel');
+  const stage = document.getElementById('stage');
+
+  function switchTab(tab){
+    activeTab = tab;
+    tabGameBtn.classList.toggle('active', tab==='game');
+    tabCardsBtn.classList.toggle('active', tab==='cards');
+    flashcardPanel.classList.toggle('open', tab==='cards');
+    stage.classList.toggle('hidden', tab==='cards');
+    if(tab==='cards') renderFlashcard(true);
+  }
+  tabGameBtn.addEventListener('click', ()=> switchTab('game'));
+  tabCardsBtn.addEventListener('click', ()=> switchTab('cards'));
+
+  // ---------- Game state ----------
+  let state = 'idle'; // idle, playing, dead
+  let best = Number(localStorage.getItem('flappyQuizBest')||0);
+  bestRailVal.textContent = best;
+
+  const bird = { x:110, y:PLAY_H/2, r:15, vy:0, rot:0 };
+  const GRAVITY = 0.38;
+  const FLAP_V = -7.2;
+  const PIPE_W = 74;
+  const GAP_H = 132;
+  const SPEED0 = 2.4;
+  const WALL_SPACING = 400;
+  let speed = SPEED0;
+  let streak = 0;
+  let bestStreak = 0;
+  let walls = [];
+  let frame = 0;
+  let score = 0;
+  let groundOffset = 0;
+  let clouds = [];
+  let lastBannerQ = null;
+
+  function resetGame(){
+    bird.y = PLAY_H/2; bird.vy = 0; bird.rot = 0;
+    walls = [];
+    speed = SPEED0;
+    frame = 0;
+    score = 0;
+    lastBannerQ = null;
+    qBag = shuffledBag(QUESTIONS);
+    streak = 0;
+    spawnWall(560);
+    spawnWall(560+WALL_SPACING);
+    clouds = [];
+    for(let i=0;i<5;i++){
+      clouds.push({x:Math.random()*W, y:30+Math.random()*140, s:0.6+Math.random()*0.8, sp:0.2+Math.random()*0.3});
+    }
+  }
+
+  function spawnWall(x){
+    const topSolid = 40 + Math.random()*110;   // 40-150
+    const midSolid = 50 + Math.random()*80;    // 50-130
+    const gap1Start = topSolid;
+    const gap1End = gap1Start + GAP_H;
+    const midStart = gap1End;
+    const midEnd = midStart + midSolid;
+    const gap2Start = midEnd;
+    const gap2End = gap2Start + GAP_H;
+    const bottomStart = gap2End;
+    const bottomEnd = PLAY_H - 6;
+
+    const correctOnTop = Math.random() < 0.5;
+    const question = nextQuestion();
+
+    walls.push({
+      x, w: PIPE_W,
+      segs: [ [0, gap1End<0?0:topSolid], [midStart, midEnd], [bottomStart, bottomEnd] ],
+      gap1: {y0:gap1Start, y1:gap1End, correct: correctOnTop},
+      gap2: {y0:gap2Start, y1:gap2End, correct: !correctOnTop},
+      question,
+      passed:false,
+      resolved:false
+    });
+  }
+
+  function flap(){
+    if(activeTab !== 'game') return;
+    if(state==='idle'){ startGame(); return; }
+    if(state==='dead') return;
+    bird.vy = FLAP_V;
+  }
+
+  function startGame(){
+    resetGame();
+    state = 'playing';
+    startScreen.classList.add('hidden');
+    overScreen.classList.add('hidden');
+    hud.classList.remove('hidden');
+    hud.textContent = '0';
+    streakBadge.classList.remove('hidden');
+    streakVal.textContent = '0';
+  }
+
+  function endGame(reason){
+    state = 'dead';
+    if(score>best){
+      best = score;
+      localStorage.setItem('flappyQuizBest', String(best));
+      bestRailVal.textContent = best;
+    }
+    finalScoreEl.textContent = score;
+    bestScoreEl.textContent = best;
+    document.getElementById('bestStreakVal').textContent = bestStreak;
+    deathReasonEl.textContent = reason;
+    hud.classList.add('hidden');
+    streakBadge.classList.add('hidden');
+    questionBar.classList.remove('show');
+    streak = 0;
+    setTimeout(()=>{ overScreen.classList.remove('hidden'); }, 400);
+  }
+
+  // ---------- Input ----------
+  window.addEventListener('keydown', (e)=>{
+    if(e.code==='Space' && activeTab==='game'){ e.preventDefault(); flap(); }
+  });
+  canvas.addEventListener('mousedown', flap);
+  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); flap(); }, {passive:false});
+  startBtn.addEventListener('click', startGame);
+  restartBtn.addEventListener('click', startGame);
+
+  // ---------- Drawing helpers ----------
+  function drawBackground(){
+    const g = ctx.createLinearGradient(0,0,0,PLAY_H);
+    g.addColorStop(0, '#4ec0ca');
+    g.addColorStop(1, '#bdeeee');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,PLAY_H);
+
+    // clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    clouds.forEach(c=>{
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.scale(c.s, c.s);
+      ctx.beginPath();
+      ctx.ellipse(0,0,26,14,0,0,Math.PI*2);
+      ctx.ellipse(20,-6,18,12,0,0,Math.PI*2);
+      ctx.ellipse(-20,-4,16,11,0,0,Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    });
+
+    // distant hills
+    ctx.fillStyle = '#8bc34a';
+    ctx.beginPath();
+    ctx.moveTo(0, PLAY_H);
+    for(let x=0;x<=W;x+=40){
+      const h = 30 + 18*Math.sin((x+frame*0.5)/60);
+      ctx.lineTo(x, PLAY_H - h);
+    }
+    ctx.lineTo(W, PLAY_H);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawGround(){
+    ctx.fillStyle = '#ded895';
+    ctx.fillRect(0, PLAY_H, W, GROUND_H);
+    ctx.fillStyle = '#6ec02b';
+    ctx.fillRect(0, PLAY_H, W, 10);
+    ctx.fillStyle = '#5a9c22';
+    const stripe = 24;
+    for(let x=-stripe; x<W+stripe; x+=stripe){
+      ctx.fillRect(x - (groundOffset%stripe), PLAY_H+2, stripe/2, 6);
+    }
+  }
+
+  function wrapText(text, maxWidth){
+    const words = text.split(' ');
+    let lines = []; let line = '';
+    for(const w of words){
+      const test = line ? line+' '+w : w;
+      if(ctx.measureText(test).width > maxWidth && line){
+        lines.push(line); line = w;
+      } else line = test;
+    }
+    if(line) lines.push(line);
+    return lines;
+  }
+
+  function drawWall(wall){
+    ctx.fillStyle = '#6ec02b';
+    ctx.strokeStyle = '#4a8c1c';
+    ctx.lineWidth = 3;
+    wall.segs.forEach(([y0,y1])=>{
+      if(y1<=y0) return;
+      ctx.fillRect(wall.x, y0, wall.w, y1-y0);
+      ctx.strokeRect(wall.x+1.5, y0+1.5, wall.w-3, (y1-y0)-3);
+      // cap
+      const capH = 18;
+      if(y1 < PLAY_H-2){ // cap facing a gap below
+        ctx.fillRect(wall.x-5, y1-capH, wall.w+10, capH);
+        ctx.strokeRect(wall.x-3.5, y1-capH+1.5, wall.w+7, capH-3);
+      }
+      if(y0 > 0){ // cap facing a gap above
+        ctx.fillRect(wall.x-5, y0, wall.w+10, capH);
+        ctx.strokeRect(wall.x-3.5, y0+1.5, wall.w+7, capH-3);
+      }
+    });
+
+    // answer labels inside gaps
+    function labelGap(gap){
+      const text = gap.correct ? wall.question.correct : wall.question.wrong;
+      const cx = wall.x + wall.w/2;
+      const cy = (gap.y0+gap.y1)/2;
+      ctx.font = 'bold 13px Trebuchet MS, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const lines = wrapText(text, wall.w+30);
+      const lh = 15;
+      const startY = cy - ((lines.length-1)*lh)/2;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillStyle = '#ffffff';
+      lines.forEach((ln,i)=>{
+        ctx.strokeText(ln, cx, startY+i*lh);
+        ctx.fillText(ln, cx, startY+i*lh);
+      });
+    }
+    labelGap(wall.gap1);
+    labelGap(wall.gap2);
+  }
+
+  function drawBird(){
+    ctx.save();
+    ctx.translate(bird.x, bird.y);
+    let rot = Math.max(-0.5, Math.min(1.1, bird.vy/9));
+    ctx.rotate(rot);
+
+    // wing
+    const wingFlap = Math.sin(frame*0.4)*4;
+    ctx.fillStyle = '#f6c343';
+    ctx.strokeStyle = '#a86e17';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(-2, 4+wingFlap*0.3, 9, 6, -0.3, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    // body
+    ctx.fillStyle = '#ffd23f';
+    ctx.beginPath();
+    ctx.ellipse(0,0, bird.r, bird.r-1, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    // belly
+    ctx.fillStyle = '#fff2c2';
+    ctx.beginPath();
+    ctx.ellipse(-3,4,8,6,0,0,Math.PI*2);
+    ctx.fill();
+
+    // eye
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(6,-4,5,0,Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#a86e17'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle = '#2b2b2b';
+    ctx.beginPath();
+    ctx.arc(7.5,-4,2.3,0,Math.PI*2);
+    ctx.fill();
+
+    // beak
+    ctx.fillStyle = '#ff8c1a';
+    ctx.strokeStyle = '#c4610a';
+    ctx.beginPath();
+    ctx.moveTo(bird.r-4,-1);
+    ctx.lineTo(bird.r+9,2);
+    ctx.lineTo(bird.r-4,6);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function activeQuestion(){
+    for(const w of walls){
+      if(!w.passed && w.x+w.w > bird.x-40) return w.question.q;
+    }
+    return '';
+  }
+
+  // Question now renders as real DOM text in its own bar above the canvas —
+  // crisp at any size and never overlapped by pipes or the bird.
+  function updateQuestionBanner(){
+    if(state !== 'playing'){
+      questionBar.classList.remove('show');
+      return;
+    }
+    const q = activeQuestion();
+    if(!q){
+      questionBar.classList.remove('show');
+      lastBannerQ = null;
+      return;
+    }
+    if(q !== lastBannerQ){
+      questionText.textContent = q;
+      lastBannerQ = q;
+    }
+    questionBar.classList.add('show');
+  }
+
+  // ---------- Update / physics ----------
+  function update(){
+    if(activeTab !== 'game') return; // freeze the game while browsing flashcards
+
+    frame++;
+    groundOffset += speed;
+    clouds.forEach(c=>{ c.x -= c.sp; if(c.x < -40) c.x = W+40; });
+
+    if(state!=='playing') return;
+
+    bird.vy += GRAVITY;
+    bird.y += bird.vy;
+
+    if(bird.y - bird.r < 0){ bird.y = bird.r; bird.vy = 0; }
+    if(bird.y + bird.r > PLAY_H){
+      bird.y = PLAY_H - bird.r;
+      endGame("You hit the ground.");
+    }
+
+    walls.forEach(w=>{ w.x -= speed; });
+    if(walls.length && walls[0].x + walls[0].w < -20){
+      walls.shift();
+      spawnWall(walls.length ? walls[walls.length-1].x + WALL_SPACING : W+80);
+    }
+    if(walls.length < 2){
+      spawnWall((walls.length?walls[walls.length-1].x:W) + WALL_SPACING);
+    }
+
+    // collisions
+    for(const w of walls){
+      const overlapsX = bird.x + bird.r > w.x && bird.x - bird.r < w.x + w.w;
+      if(overlapsX){
+        let hitSolid = false;
+        for(const [y0,y1] of w.segs){
+          if(y1<=y0) continue;
+          if(bird.y + bird.r > y0 && bird.y - bird.r < y1){ hitSolid = true; break; }
+        }
+        if(hitSolid){
+          endGame("You crashed into the wall.");
+          return;
+        }
+        // track which gap bird is currently centered in
+        if(bird.y >= w.gap1.y0 && bird.y <= w.gap1.y1) w._lastGapCorrect = w.gap1.correct;
+        else if(bird.y >= w.gap2.y0 && bird.y <= w.gap2.y1) w._lastGapCorrect = w.gap2.correct;
+      }
+
+      if(!w.passed && bird.x - bird.r > w.x + w.w){
+        w.passed = true;
+        if(w._lastGapCorrect === true){
+          streak++;
+          if(streak > bestStreak) bestStreak = streak;
+          // small combo bonus: every 5 in a row is worth an extra point
+          const bonus = (streak > 0 && streak % 5 === 0) ? 1 : 0;
+          score += 1 + bonus;
+          updateHud(bonus > 0);
+        } else {
+          endGame("Wrong answer — try again!");
+        }
+        return;
+      }
+    }
+  }
+
+  function draw(){
+    drawBackground();
+    walls.forEach(drawWall);
+    drawBird();
+    drawGround();
+    updateQuestionBanner();
+  }
+
+  function loop(){
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // init idle scene
+  resetGame();
+  draw();
+  loop();
+})();
+</script>
+</body>
+</html>
